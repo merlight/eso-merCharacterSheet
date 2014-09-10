@@ -1,0 +1,20 @@
+; This add-on is not created by, affiliated with or sponsored by ZeniMax
+; Media Inc. or its affiliates. The Elder Scrolls® and related logos are
+; registered trademarks or trademarks of ZeniMax Media Inc. in the United
+; States and/or other countries. All rights reserved.
+
+## Title: |ce5ca5cMer|r Character Sheet
+## Author: merlight
+## APIVersion: 100008
+## Description: Move |ce5ca5cActive effects|r above |ce5ca5cActive mount|r, and add |ce5ca5cResearch|r timers to |ce5ca5cCharacter|r stats UI.
+
+; Make sure Harven's Stabled Mounts is loaded first.
+; Harven hooks STATS.CreateMountSection in order to append Stabled
+; mounts section below Active mount, and that hook needs to be in
+; place before I swap it with CreateActiveEffectsSection.
+
+## OptionalDependsOn: HarvensStabledMounts
+
+merCharacterSheet.lua
+merCharacterSheet.xml
+
