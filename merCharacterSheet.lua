@@ -1,4 +1,19 @@
 local myNAME = "merCharacterSheet"
+local mySAVEDVARS = myNAME .. "_SavedVariables"
+local g_savedVars = {}
+
+
+local function getStringIdName(stringId)
+    if type(stringId) == "number" then
+        for key, value in zo_insecurePairs(_G) do
+            if value == stringId and type(key) == "string" and
+                key:match("^SI_[0-9A-Z_]+$") then
+                return key
+            end
+        end
+    end
+    return stringId
+end
 
 
 local function initResearchRow(row)
@@ -6,9 +21,12 @@ local function initResearchRow(row)
     row.itemName = row:GetNamedChild("ItemName")
     row.timer = ZO_TimerBar:New(row:GetNamedChild("TimerBar"))
     row.timer.direction = TIMER_BAR_COUNTS_DOWN
+
+    -- assign time format parameters directly, only because ZOS forgot some
+    -- debug output in ZO_TimerBar:SetTimeFormatParameters, which would show
+    -- up since these rows are not created until character sheet is shown
     row.timer.timeFormatStyle = TIME_FORMAT_STYLE_COLONS
     row.timer.timePrecision = TIME_FORMAT_PRECISION_TWELVE_HOUR
-
 end
 
 
@@ -61,7 +79,89 @@ local function updateResearchGroup(group, craftingType)
 end
 
 
-local function zoStats_CreateResearchSection(self)
+local ZO_Stats = getmetatable(STATS)
+local MovableStats = ZO_Stats:Subclass()
+MovableStats.__index = MovableStats
+setmetatable(STATS, MovableStats)
+
+
+function MovableStats:AddDivider()
+    self.merLastSection = nil
+    return ZO_Stats.AddDivider(self)
+end
+
+
+function MovableStats:AddHeader(text, optionalTemplate)
+    local divider = self.lastControl
+    local header = ZO_Stats.AddHeader(self, text, optionalTemplate)
+    if not self.merLastSection then
+        self.merLastSection =
+        {
+            dividerControl = divider,
+            headerId = getStringIdName(text),
+            headerControl = header,
+            lastControl = header,
+        }
+        self:merAddSection(self.merLastSection)
+        self:merMakeHeaderDraggable(header)
+    end
+    return header
+end
+
+
+function MovableStats:AddRawControl(control)
+    local control = ZO_Stats.AddRawControl(self, control)
+    if self.merLastSection then
+        self.merLastSection.lastControl = control
+    end
+    return control
+end
+
+
+function MovableStats:InitializeKeybindButtons()
+    self:AddDivider()
+    self:merCreateResearchSection()
+    ZO_Stats.InitializeKeybindButtons(self)
+    self:merSortSections()
+    self:merUpdateAnchors()
+end
+
+
+function MovableStats:SetUpTitleSection()
+    ZO_Stats.SetUpTitleSection(self)
+
+    local function createShadowControl(name, template)
+        local control = CreateControlFromVirtual("$(parent)", self.scrollChild, template, name)
+        control:SetHidden(true)
+        control:SetAlpha(0.6)
+        control:SetExcludeFromResizeToFitExtents(true)
+        return control
+    end
+
+    self.merSections = {}
+    self.merShadowHeader = createShadowControl("ShadowHeader1", "ZO_StatsHeader")
+    self.merShadowDivider = createShadowControl("ShadowDivider1", "ZO_WideHorizontalDivider")
+    self.merShadowDivider:SetAnchor(BOTTOM, self.merShadowHeader, TOP, 0, 5)
+end
+
+
+function MovableStats:merAddSection(section)
+    for savedIndex, headerId in ipairs(g_savedVars.sectionOrder) do
+        if section.headerId == headerId then
+            section.savedIndex = savedIndex
+            break
+        end
+    end
+    if not section.savedIndex then
+        local savedIndex = #(g_savedVars.sectionOrder) + 1
+        g_savedVars.sectionOrder[savedIndex] = section.headerId
+        section.savedIndex = savedIndex
+    end
+    table.insert(self.merSections, section)
+end
+
+
+function MovableStats:merCreateResearchSection()
     local groupsByType = {}
 
     local function addResearchGroup(craftingType)
@@ -89,18 +189,113 @@ local function zoStats_CreateResearchSection(self)
 end
 
 
+function MovableStats:merMakeHeaderDraggable(header)
+
+    local function updateShadowHeader()
+        local _, mouseY = GetUIMousePosition()
+        local shadowTop = mouseY - self.merDragStartY
+        for index, section in ipairs(self.merSections) do
+            if header == section.headerControl then
+                local sectionAbove = self.merSections[index - 1]
+                local sectionBelow = self.merSections[index + 1]
+                if sectionBelow and sectionBelow.headerControl:GetTop() + 5 < shadowTop then
+                    self:merSwapSections(index, index + 1)
+                    self:merUpdateAnchors()
+                elseif sectionAbove and sectionAbove.headerControl:GetTop() - 2 > shadowTop then
+                    self:merSwapSections(index, index - 1)
+                    self:merUpdateAnchors()
+                end
+                break
+            end
+        end
+        self.merShadowHeader:ClearAnchors()
+        self.merShadowHeader:SetAnchor(TOP, nil, TOP, 0, shadowTop - self.scrollChild:GetTop())
+    end
+
+    local function onDragStart(control, button)
+        if self.merDragStartY then
+            self.merShadowHeader:SetText(control:GetText())
+            self.merShadowHeader:SetHandler("OnUpdate", updateShadowHeader)
+            self.merShadowHeader:SetHidden(false)
+            self.merShadowDivider:SetHidden(false)
+            -- change dragged header color
+            control:SetColor(ZO_SECOND_CONTRAST_TEXT:UnpackRGBA())
+        end
+    end
+
+    local function onMouseDown(control, button)
+        if button == 1 then
+            local _, mouseY = GetUIMousePosition()
+            self.merDragStartY = mouseY - control:GetTop()
+        end
+    end
+
+    local function onMouseUp(control, button, upInside)
+        if self.merDragStartY then
+            self.merShadowHeader:SetHandler("OnUpdate", nil)
+            self.merShadowHeader:SetHidden(true)
+            self.merShadowDivider:SetHidden(true)
+            self.merDragStartY = nil
+            -- restore default header color
+            control:SetColor(ZO_SELECTED_TEXT:UnpackRGBA())
+        end
+    end
+
+    header:SetMouseEnabled(true)
+    header:SetHandler("OnDragStart", onDragStart)
+    header:SetHandler("OnMouseDown", onMouseDown)
+    header:SetHandler("OnMouseUp", onMouseUp)
+end
+
+
+function MovableStats:merSortSections()
+    local function sectionComp(a, b)
+        return a.savedIndex < b.savedIndex
+    end
+    table.sort(self.merSections, sectionComp)
+end
+
+
+function MovableStats:merSwapSections(indexA, indexB)
+    local sectionA = self.merSections[indexA]
+    local sectionB = self.merSections[indexB]
+    local savedIndexA = sectionA.savedIndex
+    local savedIndexB = sectionB.savedIndex
+    sectionA.savedIndex = savedIndexB
+    sectionB.savedIndex = savedIndexA
+    self.merSections[indexA] = sectionB
+    self.merSections[indexB] = sectionA
+    g_savedVars.sectionOrder[savedIndexA] = sectionB.headerId
+    g_savedVars.sectionOrder[savedIndexB] = sectionA.headerId
+end
+
+
+function MovableStats:merUpdateAnchors()
+    local anchorControl = nil
+    for index, section in ipairs(self.merSections) do
+        section.dividerControl:ClearAnchors()
+        if anchorControl == nil then
+            section.dividerControl:SetAnchor(TOP, anchorControl, TOP, 0, 2)
+        else
+            section.dividerControl:SetAnchor(TOP, anchorControl, BOTTOM, 0, 15)
+        end
+        anchorControl = section.lastControl
+    end
+end
+
+
 local function onAddOnLoaded(eventCode, addOnName)
     if addOnName ~= myNAME then return end
     EVENT_MANAGER:UnregisterForEvent(myNAME, EVENT_ADD_ON_LOADED)
 
-    local zoStats_CreateMountSection = STATS.CreateMountSection
-    local zoStats_CreateActiveEffectsSection = STATS.CreateActiveEffectsSection
+    if type(_G[mySAVEDVARS]) ~= "table" then
+        _G[mySAVEDVARS] = g_savedVars
+    else
+        g_savedVars = _G[mySAVEDVARS]
+    end
 
-    STATS.CreateMountSection = zoStats_CreateActiveEffectsSection
-    STATS.CreateActiveEffectsSection = function(self)
-        zoStats_CreateMountSection(self)
-        self:AddDivider()
-        zoStats_CreateResearchSection(self)
+    if type(g_savedVars.sectionOrder) ~= "table" then
+        g_savedVars.sectionOrder = {}
     end
 end
 
