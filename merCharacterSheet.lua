@@ -1,6 +1,9 @@
 local myNAME = "merCharacterSheet"
 local mySAVEDVARS = myNAME .. "_SavedVariables"
-local g_savedVars = {}
+
+local g_savedVars = nil
+local g_characterVars = nil
+local g_researchGroups = {}
 
 
 local function getStringIdName(stringId)
@@ -139,22 +142,23 @@ function MovableStats:SetUpTitleSection()
     end
 
     self.merSections = {}
-    self.merShadowHeader = createShadowControl("ShadowHeader1", "ZO_StatsHeader")
-    self.merShadowDivider = createShadowControl("ShadowDivider1", "ZO_WideHorizontalDivider")
+    self.merShadowHeader = createShadowControl("ShadowHeader", "ZO_StatsHeader")
+    self.merShadowDivider = createShadowControl("ShadowDivider", "ZO_WideHorizontalDivider")
     self.merShadowDivider:SetAnchor(BOTTOM, self.merShadowHeader, TOP, 0, 5)
 end
 
 
 function MovableStats:merAddSection(section)
-    for savedIndex, headerId in ipairs(g_savedVars.sectionOrder) do
+    local sectionOrder = g_savedVars:sub("sectionOrder")
+    for savedIndex, headerId in ipairs(sectionOrder) do
         if section.headerId == headerId then
             section.savedIndex = savedIndex
             break
         end
     end
     if not section.savedIndex then
-        local savedIndex = #(g_savedVars.sectionOrder) + 1
-        g_savedVars.sectionOrder[savedIndex] = section.headerId
+        local savedIndex = #(sectionOrder) + 1
+        sectionOrder[savedIndex] = section.headerId
         section.savedIndex = savedIndex
     end
     table.insert(self.merSections, section)
@@ -162,28 +166,79 @@ end
 
 
 function MovableStats:merCreateResearchSection()
-    local groupsByType = {}
+    local hideResearch = g_characterVars:sub("hideResearch")
+    local header = self:AddHeader(SI_SMITHING_TAB_RESEARCH)
+    local container = self.scrollChild:CreateControl("$(parent)Research", CT_CONTROL)
 
-    local function addResearchGroup(craftingType)
-        local group = self:CreateControlFromVirtual("ResearchGroup", "merCharacterSheetResearchGroup")
+    self:SetNextControlPadding(0)
+    self:AddRawControl(container)
+    container:SetResizeToFitDescendents(true)
+
+    local function updateToggleButtonIcon(button)
+        if hideResearch[button.craftingTypeName] then
+            button.icon:SetColor(ZO_DEFAULT_DISABLED_COLOR:UnpackRGBA())
+        else
+            button.icon:SetColor(ZO_DEFAULT_ENABLED_COLOR:UnpackRGBA())
+        end
+    end
+
+    local function onToggleButtonClicked(button, mouseButton)
+        if mouseButton == 1 then
+            local craftingTypeName = button.craftingTypeName
+            hideResearch[craftingTypeName] = not hideResearch[craftingTypeName]
+            updateToggleButtonIcon(button)
+            self:merUpdateResearchGroupAnchors()
+        end
+    end
+
+    local function addToggleButton(craftingTypeName, offsetX)
+        local craftingType = _G[craftingTypeName]
+        local skillType, skillIndex = GetCraftingSkillLineIndices(craftingType)
+        local _, skillIcon = GetSkillAbilityInfo(skillType, skillIndex, 1)
+        local button = CreateControlFromVirtual("$(parent)Button", header,
+                                                "merCharacterSheetResearchToggleButton",
+                                                craftingType)
+        button.craftingTypeName = craftingTypeName
+        button.icon = button:GetNamedChild("Icon")
+        button.icon:SetTexture(skillIcon)
+        button:SetAnchor(LEFT, nil, LEFT, offsetX, 2)
+        button:SetHandler("OnClicked", onToggleButtonClicked)
+        updateToggleButtonIcon(button)
+    end
+
+    local function addResearchGroup(craftingTypeName)
+        local craftingType = _G[craftingTypeName]
+        local group = CreateControlFromVirtual("$(parent)Group", container,
+                                               "merCharacterSheetResearchGroup",
+                                               craftingType)
+        group.craftingType = craftingType
+        group.craftingTypeName = craftingTypeName
         group.rowPool = ZO_ControlPool:New("merCharacterSheetResearchRow", group, "Row")
         group.rowPool:SetCustomFactoryBehavior(initResearchRow)
         group.rowPool:SetCustomResetBehavior(resetResearchRow)
         updateResearchGroup(group, craftingType)
-        groupsByType[craftingType] = group
+        table.insert(g_researchGroups, group)
     end
 
+    local headerTextWidth = header:GetTextWidth()
+    addToggleButton("CRAFTING_TYPE_BLACKSMITHING", headerTextWidth + 15)
+    addToggleButton("CRAFTING_TYPE_CLOTHIER", headerTextWidth + 55)
+    addToggleButton("CRAFTING_TYPE_WOODWORKING", headerTextWidth + 95)
+
+    addResearchGroup("CRAFTING_TYPE_BLACKSMITHING")
+    addResearchGroup("CRAFTING_TYPE_CLOTHIER")
+    addResearchGroup("CRAFTING_TYPE_WOODWORKING")
+
+    self:merUpdateResearchGroupAnchors()
+
     local function updateResearch(eventCode, craftingType, lineIndex, traitIndex)
-        local group = groupsByType[craftingType]
-        if group then
-            updateResearchGroup(group, craftingType)
+        for _, group in ipairs(g_researchGroups) do
+            if group.craftingType == craftingType then
+                updateResearchGroup(group, craftingType)
+            end
         end
     end
 
-    local header = self:AddHeader(SI_SMITHING_TAB_RESEARCH)
-    addResearchGroup(CRAFTING_TYPE_BLACKSMITHING)
-    addResearchGroup(CRAFTING_TYPE_CLOTHIER)
-    addResearchGroup(CRAFTING_TYPE_WOODWORKING)
     header:RegisterForEvent(EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, updateResearch)
     header:RegisterForEvent(EVENT_SMITHING_TRAIT_RESEARCH_STARTED, updateResearch)
 end
@@ -212,7 +267,7 @@ function MovableStats:merMakeHeaderDraggable(header)
         self.merShadowHeader:SetAnchor(TOP, nil, TOP, 0, shadowTop - self.scrollChild:GetTop())
     end
 
-    local function onDragStart(control, button)
+    local function onDragStart(control, mouseButton)
         if self.merDragStartY then
             self.merShadowHeader:SetText(control:GetText())
             self.merShadowHeader:SetHandler("OnUpdate", updateShadowHeader)
@@ -223,14 +278,14 @@ function MovableStats:merMakeHeaderDraggable(header)
         end
     end
 
-    local function onMouseDown(control, button)
-        if button == 1 then
+    local function onMouseDown(control, mouseButton)
+        if mouseButton == 1 then
             local _, mouseY = GetUIMousePosition()
             self.merDragStartY = mouseY - control:GetTop()
         end
     end
 
-    local function onMouseUp(control, button, upInside)
+    local function onMouseUp(control, mouseButton, upInside)
         if self.merDragStartY then
             self.merShadowHeader:SetHandler("OnUpdate", nil)
             self.merShadowHeader:SetHidden(true)
@@ -257,6 +312,7 @@ end
 
 
 function MovableStats:merSwapSections(indexA, indexB)
+    local sectionOrder = g_savedVars:sub("sectionOrder")
     local sectionA = self.merSections[indexA]
     local sectionB = self.merSections[indexB]
     local savedIndexA = sectionA.savedIndex
@@ -265,8 +321,8 @@ function MovableStats:merSwapSections(indexA, indexB)
     sectionB.savedIndex = savedIndexA
     self.merSections[indexA] = sectionB
     self.merSections[indexB] = sectionA
-    g_savedVars.sectionOrder[savedIndexA] = sectionB.headerId
-    g_savedVars.sectionOrder[savedIndexB] = sectionA.headerId
+    sectionOrder[savedIndexA] = sectionB.headerId
+    sectionOrder[savedIndexB] = sectionA.headerId
 end
 
 
@@ -284,19 +340,59 @@ function MovableStats:merUpdateAnchors()
 end
 
 
+function MovableStats:merUpdateResearchGroupAnchors()
+    local anchorControl, anchorPoint = nil, TOP
+    for _, group in ipairs(g_researchGroups) do
+        group:ClearAnchors()
+        if g_characterVars:get("hideResearch", group.craftingTypeName) then
+            group:SetHidden(true)
+        else
+            group:SetAnchor(TOP, anchorControl, anchorPoint, 0, 5)
+            group:SetHidden(false)
+            anchorControl, anchorPoint = group, BOTTOM
+        end
+    end
+end
+
+
+local SavedTable = {}
+SavedTable.__index = SavedTable
+
+
+function SavedTable.get(tab, ...)
+    for i = 1, select("#", ...) do
+        if type(tab) ~= "table" then
+            return nil
+        end
+        tab = tab[select(i, ...)]
+    end
+    return tab
+end
+
+
+function SavedTable.sub(tab, ...)
+    for i = 1, select("#", ...) do
+        local key = select(i, ...)
+        local sub = tab[key]
+        if type(sub) ~= "table" then
+            sub = {}
+            tab[key] = sub
+        end
+        tab = sub
+    end
+    return tab
+end
+
+
 local function onAddOnLoaded(eventCode, addOnName)
     if addOnName ~= myNAME then return end
     EVENT_MANAGER:UnregisterForEvent(myNAME, EVENT_ADD_ON_LOADED)
 
-    if type(_G[mySAVEDVARS]) ~= "table" then
-        _G[mySAVEDVARS] = g_savedVars
-    else
-        g_savedVars = _G[mySAVEDVARS]
-    end
+    g_savedVars = SavedTable.sub(_G, mySAVEDVARS)
+    setmetatable(g_savedVars, SavedTable)
 
-    if type(g_savedVars.sectionOrder) ~= "table" then
-        g_savedVars.sectionOrder = {}
-    end
+    g_characterVars = g_savedVars:sub("character:" .. GetUnitName("player"))
+    setmetatable(g_characterVars, SavedTable)
 end
 
 

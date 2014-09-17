@@ -1,6 +1,22 @@
 <GuiXml>
 	<Controls>
 
+		<Button name="merCharacterSheetResearchToggleButton" virtual="true" level="1">
+			<Dimensions x="28" y="28" />
+			<Textures
+				normal="EsoUI/Art/ActionBar/passiveAbilityFrame_round_up.dds"
+				pressed="EsoUI/Art/ActionBar/passiveAbilityFrame_round_up.dds"
+				mouseOver=""
+				disabled="EsoUI/Art/ActionBar/passiveAbilityFrame_round_up.dds"
+			/>
+			<Controls>
+				<Texture name="$(parent)Icon" textureFile="EsoUI/Art/Icons/icon_missing.dds">
+					<Anchor point="TOPLEFT" offsetX="1" offsetY="1" />
+					<Anchor point="BOTTOMRIGHT" offsetX="-1" offsetY="-1" />
+				</Texture>
+			</Controls>
+		</Button>
+
 		<Control name="merCharacterSheetResearchHeader" virtual="true">
 			<Dimensions x="607" y="40" />
 			<Controls>
@@ -10,6 +26,14 @@
 				<Label name="$(parent)SkillName" inherits="ZO_StatsRowName">
 					<Anchor point="LEFT" offsetX="50" />
 				</Label>
+			</Controls>
+		</Control>
+
+		<Control name="merCharacterSheetResearchGroup" virtual="true" resizeToFitDescendents="true">
+			<Controls>
+				<Control name="$(parent)Header" inherits="merCharacterSheetResearchHeader">
+					<Anchor point="TOPLEFT" />
+				</Control>
 			</Controls>
 		</Control>
 
@@ -38,14 +62,6 @@
 							<Anchor point="CENTER" />
 						</Label>
 					</Controls>
-				</Control>
-			</Controls>
-		</Control>
-
-		<Control name="merCharacterSheetResearchGroup" virtual="true" resizeToFitDescendents="true">
-			<Controls>
-				<Control name="$(parent)Header" inherits="merCharacterSheetResearchHeader">
-					<Anchor point="TOPLEFT" />
 				</Control>
 			</Controls>
 		</Control>
