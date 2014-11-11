@@ -9,6 +9,15 @@
 				mouseOver=""
 				disabled="EsoUI/Art/ActionBar/passiveAbilityFrame_round_up.dds"
 			/>
+			<OnMouseEnter>
+				if self.tooltipText then
+					InitializeTooltip(InformationTooltip, self, BOTTOM)
+					SetTooltipText(InformationTooltip, self.tooltipText)
+				end
+			</OnMouseEnter>
+			<OnMouseExit>
+				ClearTooltip(InformationTooltip)
+			</OnMouseExit>
 			<Controls>
 				<Texture name="$(parent)Icon" textureFile="EsoUI/Art/Icons/icon_missing.dds">
 					<Anchor point="TOPLEFT" offsetX="1" offsetY="1" />

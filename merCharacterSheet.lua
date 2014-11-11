@@ -194,11 +194,13 @@ function MovableStats:merCreateResearchSection()
     local function addToggleButton(craftingTypeName, offsetX)
         local craftingType = _G[craftingTypeName]
         local skillType, skillIndex = GetCraftingSkillLineIndices(craftingType)
+        local skillName = GetSkillLineInfo(skillType, skillIndex)
         local _, skillIcon = GetSkillAbilityInfo(skillType, skillIndex, 1)
         local button = CreateControlFromVirtual("$(parent)Button", header,
                                                 "merCharacterSheetResearchToggleButton",
                                                 craftingType)
         button.craftingTypeName = craftingTypeName
+        button.tooltipText = zo_strformat(SI_SKILLS_ENTRY_LINE_NAME_FORMAT, skillName)
         button.icon = button:GetNamedChild("Icon")
         button.icon:SetTexture(skillIcon)
         button:SetAnchor(LEFT, nil, LEFT, offsetX, 2)
@@ -233,12 +235,14 @@ function MovableStats:merCreateResearchSection()
 
     local function updateResearch(eventCode, craftingType, lineIndex, traitIndex)
         for _, group in ipairs(g_researchGroups) do
-            if group.craftingType == craftingType then
-                updateResearchGroup(group, craftingType)
+            if eventCode == EVENT_SKILLS_FULL_UPDATE or
+               craftingType == group.craftingType then
+                updateResearchGroup(group, group.craftingType)
             end
         end
     end
 
+    header:RegisterForEvent(EVENT_SKILLS_FULL_UPDATE, updateResearch)
     header:RegisterForEvent(EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, updateResearch)
     header:RegisterForEvent(EVENT_SMITHING_TRAIT_RESEARCH_STARTED, updateResearch)
 end
