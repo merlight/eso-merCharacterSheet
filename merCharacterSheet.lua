@@ -302,7 +302,7 @@ function MovableStats:merMakeHeaderDraggable(header)
             self.merShadowHeader:SetHidden(false)
             self.merShadowDivider:SetHidden(false)
             -- change dragged header color
-            control:SetColor(ZO_SECOND_CONTRAST_TEXT:UnpackRGBA())
+            control:SetColor(ZO_DISABLED_TEXT:UnpackRGBA())
         end
     end
 
