@@ -5,7 +5,7 @@
 
 ## Title: |ce5ca5cMer|r Character Sheet
 ## Author: merlight
-## APIVersion: 100010
+## APIVersion: 100011
 ## Description: Adds |ce5ca5cResearch|r timers to |ce5ca5cCharacter|r sheet, and allows you to reorder sections by dragging their headers.
 ## SavedVariables: merCharacterSheet_SavedVariables
 
