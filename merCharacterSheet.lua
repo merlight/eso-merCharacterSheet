@@ -121,6 +121,30 @@ function MovableStats:AddRawControl(control)
 end
 
 
+function MovableStats:CreateControlFromVirtual(controlType, template)
+    local lastControl = self.lastControl
+    local control = ZO_Stats.CreateControlFromVirtual(self, controlType, template)
+
+    -- in ESO Update 6, the SI_STATS_ATTRIBUTES header is created by
+    -- calling this function directly, instead of through AddHeader()
+    if not self.merLastSection and template == "ZO_AttributesHeader" then
+        self.merLastSection =
+        {
+            dividerControl = lastControl,
+            headerId = "SI_STATS_ATTRIBUTES",
+            headerControl = control,
+            lastControl = control,
+        }
+        self:merAddSection(self.merLastSection)
+        -- making this header draggable is not that simple,
+        -- since it's now comprised of three labels
+        --FIXME self:merMakeHeaderDraggable(control)
+    end
+
+    return control
+end
+
+
 function MovableStats:InitializeKeybindButtons()
     self:AddDivider()
     self:merCreateResearchSection()
