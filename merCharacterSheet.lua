@@ -425,7 +425,3 @@ end
 
 
 EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_ADD_ON_LOADED, onAddOnLoaded)
-
--- workaround for uninitialized oldInfamy bug (ESO Update 6)
--- http://www.esoui.com/forums/showpost.php?p=18907&postcount=47
-HUD_INFAMY_METER.oldInfamy = HUD_INFAMY_METER.oldInfamy or 0
