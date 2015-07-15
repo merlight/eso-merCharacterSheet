@@ -9,6 +9,6 @@
 ## Description: Adds |ce5ca5cResearch|r timers to |ce5ca5cCharacter|r sheet, and allows you to reorder sections by dragging their headers.
 ## SavedVariables: merCharacterSheet_SavedVariables
 
+DeepTable.lua
 merCharacterSheet.lua
 merCharacterSheet.xml
-

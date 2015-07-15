@@ -1,5 +1,6 @@
 local myNAME = "merCharacterSheet"
 local mySAVEDVARS = myNAME .. "_SavedVariables"
+local DT = merCharacterSheet.DeepTable
 
 local g_savedVars = nil
 local g_characterVars = nil
@@ -173,7 +174,7 @@ end
 
 
 function MovableStats:merAddSection(section)
-    local sectionOrder = g_savedVars:sub("sectionOrder")
+    local sectionOrder = DT.sub(g_savedVars, "sectionOrder")
     for savedIndex, headerId in ipairs(sectionOrder) do
         if section.headerId == headerId then
             section.savedIndex = savedIndex
@@ -190,7 +191,7 @@ end
 
 
 function MovableStats:merCreateResearchSection()
-    local hideResearch = g_characterVars:sub("hideResearch")
+    local hideResearch = DT.sub(g_characterVars, "hideResearch")
     local header = self:AddHeader(SI_SMITHING_TAB_RESEARCH)
     local container = self.scrollChild:CreateControl("$(parent)Research", CT_CONTROL)
 
@@ -340,7 +341,7 @@ end
 
 
 function MovableStats:merSwapSections(indexA, indexB)
-    local sectionOrder = g_savedVars:sub("sectionOrder")
+    local sectionOrder = DT.sub(g_savedVars, "sectionOrder")
     local sectionA = self.merSections[indexA]
     local sectionB = self.merSections[indexB]
     local savedIndexA = sectionA.savedIndex
@@ -372,7 +373,7 @@ function MovableStats:merUpdateResearchGroupAnchors()
     local anchorControl, anchorPoint = nil, TOP
     for _, group in ipairs(g_researchGroups) do
         group:ClearAnchors()
-        if g_characterVars:get("hideResearch", group.craftingTypeName) then
+        if DT.get(g_characterVars, "hideResearch", group.craftingTypeName) then
             group:SetHidden(true)
         else
             group:SetAnchor(TOP, anchorControl, anchorPoint, 0, 5)
@@ -383,44 +384,12 @@ function MovableStats:merUpdateResearchGroupAnchors()
 end
 
 
-local SavedTable = {}
-SavedTable.__index = SavedTable
-
-
-function SavedTable.get(tab, ...)
-    for i = 1, select("#", ...) do
-        if type(tab) ~= "table" then
-            return nil
-        end
-        tab = tab[select(i, ...)]
-    end
-    return tab
-end
-
-
-function SavedTable.sub(tab, ...)
-    for i = 1, select("#", ...) do
-        local key = select(i, ...)
-        local sub = tab[key]
-        if type(sub) ~= "table" then
-            sub = {}
-            tab[key] = sub
-        end
-        tab = sub
-    end
-    return tab
-end
-
-
 local function onAddOnLoaded(eventCode, addOnName)
     if addOnName ~= myNAME then return end
     EVENT_MANAGER:UnregisterForEvent(myNAME, EVENT_ADD_ON_LOADED)
 
-    g_savedVars = SavedTable.sub(_G, mySAVEDVARS)
-    setmetatable(g_savedVars, SavedTable)
-
-    g_characterVars = g_savedVars:sub("character:" .. GetUnitName("player"))
-    setmetatable(g_characterVars, SavedTable)
+    g_savedVars = DT.sub(_G, mySAVEDVARS)
+    g_characterVars = DT.sub(g_savedVars, "character:" .. GetUnitName("player"))
 end
 
 
