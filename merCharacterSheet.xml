@@ -1,14 +1,7 @@
 <GuiXml>
 	<Controls>
 
-		<Button name="merCharacterSheetResearchToggleButton" virtual="true" level="1">
-			<Dimensions x="28" y="28" />
-			<Textures
-				normal="EsoUI/Art/ActionBar/passiveAbilityFrame_round_up.dds"
-				pressed="EsoUI/Art/ActionBar/passiveAbilityFrame_round_up.dds"
-				mouseOver=""
-				disabled="EsoUI/Art/ActionBar/passiveAbilityFrame_round_up.dds"
-			/>
+		<Button name="merCharacterSheetButtonBehavior" virtual="true">
 			<OnMouseEnter>
 				if self.tooltipText then
 					InitializeTooltip(InformationTooltip, self, BOTTOM)
@@ -16,14 +9,36 @@
 				end
 			</OnMouseEnter>
 			<OnMouseExit>
-				ClearTooltip(InformationTooltip)
+				if self.tooltipText then
+					ClearTooltip(InformationTooltip)
+				end
 			</OnMouseExit>
+		</Button>
+
+		<Button name="merCharacterSheetResearchToggleButton" virtual="true" level="1"
+				inherits="merCharacterSheetButtonBehavior">
+			<Dimensions x="28" y="28" />
+			<Textures
+				normal="EsoUI/Art/ActionBar/passiveAbilityFrame_round_up.dds"
+				pressed="EsoUI/Art/ActionBar/passiveAbilityFrame_round_down.dds"
+			/>
 			<Controls>
 				<Texture name="$(parent)Icon" textureFile="EsoUI/Art/Icons/icon_missing.dds">
 					<Anchor point="TOPLEFT" offsetX="1" offsetY="1" />
 					<Anchor point="BOTTOMRIGHT" offsetX="-1" offsetY="-1" />
 				</Texture>
 			</Controls>
+		</Button>
+
+		<Button name="merCharacterSheetAltsToggleButton" virtual="true" level="1"
+				inherits="merCharacterSheetButtonBehavior">
+			<Dimensions x="32" y="32" />
+			<Textures
+				normal="EsoUI/Art/Progression/progression_indexIcon_guilds_up.dds"
+				pressed="EsoUI/Art/Progression/progression_indexIcon_guilds_down.dds"
+				disabled="EsoUI/Art/Progression/progression_indexIcon_guilds_down.dds"
+				mouseOver="EsoUI/Art/Progression/progression_indexIcon_guilds_over.dds"
+			/>
 		</Button>
 
 		<Control name="merCharacterSheetResearchHeader" virtual="true">
@@ -34,6 +49,9 @@
 				</Label>
 				<Label name="$(parent)SkillName" inherits="ZO_StatsRowName">
 					<Anchor point="LEFT" offsetX="50" />
+				</Label>
+				<Label name="$(parent)CharacterName" inherits="ZO_StatsRowName">
+					<Anchor point="LEFT" relativePoint="RIGHT" offsetX="-275" />
 				</Label>
 			</Controls>
 		</Control>

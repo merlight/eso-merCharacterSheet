@@ -2,16 +2,52 @@ local myNAME = "merCharacterSheet"
 local mySAVEDVARS = myNAME .. "_SavedVariables"
 local DT = merCharacterSheet.DeepTable
 
-local g_savedVars = nil
+local g_characterName = nil
 local g_characterVars = nil
-local g_researchGroups = {}
+local g_savedVars = nil
+
+local g_researchGroupPool = nil
+local g_researchGroupsByCraftingType = {
+    -- initialization with non-nil values allows looping
+    -- over the keys before actually creating the groups
+    [CRAFTING_TYPE_BLACKSMITHING] = false,
+    [CRAFTING_TYPE_CLOTHIER] = false,
+    [CRAFTING_TYPE_WOODWORKING] = false,
+}
+
+local craftingTypeToName = {
+    [CRAFTING_TYPE_BLACKSMITHING] = "CRAFTING_TYPE_BLACKSMITHING",
+    [CRAFTING_TYPE_CLOTHIER] = "CRAFTING_TYPE_CLOTHIER",
+    [CRAFTING_TYPE_WOODWORKING] = "CRAFTING_TYPE_WOODWORKING",
+}
+
+
+local function foreachAltCraft(func)
+    local func = func[1]
+    for altName, altVars in pairs(DT.sub(g_savedVars, "characters")) do
+        if altName ~= g_characterName and type(altVars) == "table" then
+            for craftingType, craftingTypeName in pairs(craftingTypeToName) do
+                local craftingTypeVars = altVars[craftingTypeName]
+                if type(craftingTypeVars) == "table" then
+                    func(altName, craftingType, craftingTypeName, craftingTypeVars)
+                end
+            end
+        end
+    end
+end
+
+
+local function formatSkillName(skillType, skillIndex)
+    local rawSkillName = GetSkillLineInfo(skillType, skillIndex)
+    return zo_strformat(SI_SKILLS_ENTRY_LINE_NAME_FORMAT, rawSkillName)
+end
 
 
 local function getStringIdName(stringId)
     if type(stringId) == "number" then
         for key, value in zo_insecurePairs(_G) do
             if value == stringId and type(key) == "string" and
-                key:match("^SI_[0-9A-Z_]+$") then
+                key:find("^SI_[0-9A-Z_]+$") then
                 return key
             end
         end
@@ -20,10 +56,24 @@ local function getStringIdName(stringId)
 end
 
 
+local MyTimerBar = ZO_TimerBar:Subclass()
+
+
+function MyTimerBar:Stop()
+    if not self:IsStarted() then
+        return
+    end
+    ZO_TimerBar.Stop(self)
+    if self.onStop then
+        self:onStop()
+    end
+end
+
+
 local function initResearchRow(row)
     row.itemIcon = row:GetNamedChild("ItemIcon")
     row.itemName = row:GetNamedChild("ItemName")
-    row.timer = ZO_TimerBar:New(row:GetNamedChild("TimerBar"))
+    row.timer = MyTimerBar:New(row:GetNamedChild("TimerBar"))
     row.timer.direction = TIMER_BAR_COUNTS_DOWN
 
     -- assign time format parameters directly, only because ZOS forgot some
@@ -35,51 +85,121 @@ end
 
 
 local function resetResearchRow(row)
+    row.timer.onStop = nil
     row.timer:Stop()
 end
 
 
-local function updateResearchGroup(group, craftingType)
-    local numResearchSlots = GetMaxSimultaneousSmithingResearch(craftingType)
+local function setupResearchRow(row, anchorControl, craftingType, lineIndex, traitIndex)
+    local name, icon = GetSmithingResearchLineInfo(craftingType, lineIndex)
+    local traitType = GetSmithingResearchLineTraitInfo(craftingType, lineIndex, traitIndex)
+    local traitName = GetString("SI_ITEMTRAITTYPE", traitType)
+    row:ClearAnchors()
+    row:SetAnchor(TOPRIGHT, anchorControl, BOTTOMRIGHT)
+    row.itemName:SetText(zo_strformat("<<1>>: <<2>>", name, traitName))
+    row.itemIcon:SetTexture(icon)
+end
+
+
+local function initResearchGroup(group)
+    group.rowPool = ZO_ControlPool:New("merCharacterSheetResearchRow", group, "Row")
+    group.rowPool:SetCustomFactoryBehavior(initResearchRow)
+    group.rowPool:SetCustomResetBehavior(resetResearchRow)
+end
+
+
+local function resetResearchGroup(group)
+    group.rowPool:ReleaseAllObjects()
+end
+
+
+local function updateResearchGroupFromSavedVars(group)
+    local craftingType = group.craftingType
     local numResearching = 0
-    local anchorControl = group:GetNamedChild("Header")
 
-    local skillName = GetSkillLineInfo(GetCraftingSkillLineIndices(craftingType))
+    local skillName = formatSkillName(GetCraftingSkillLineIndices(craftingType))
     local skillNameLabel = group:GetNamedChild("HeaderSkillName")
-    skillNameLabel:SetText(zo_strformat(SI_SKILLS_ENTRY_LINE_NAME_FORMAT, skillName))
+    skillNameLabel:SetText(skillName)
 
-    for lineIndex = 1, GetNumSmithingResearchLines(craftingType) do
-        local name, icon, numTraits = GetSmithingResearchLineInfo(craftingType, lineIndex)
-        for traitIndex = 1, numTraits do
-            local duration, remaining = GetSmithingResearchLineTraitTimes(craftingType, lineIndex, traitIndex)
-            if remaining then
-                numResearching = numResearching + 1
-                local row = group.rowPool:AcquireObject(numResearching)
-                local etc = GetFrameTimeSeconds() + remaining
-                local traitType = GetSmithingResearchLineTraitInfo(craftingType, lineIndex, traitIndex) 
-                local traitName = GetString("SI_ITEMTRAITTYPE", traitType)
-                row:ClearAnchors()
-                row:SetAnchor(TOPRIGHT, anchorControl, BOTTOMRIGHT)
-                row.itemName:SetText(zo_strformat("<<1>>: <<2>>", name, traitName))
-                row.itemIcon:SetTexture(icon)
-                row.timer:Start(etc - duration, etc)
+    group.rowPool:ReleaseAllObjects()
+
+    local researchSlots = group.savedVars["researchSlots"]
+    if type(researchSlots) == "table" then
+
+        -- ZO_TimerBar uses relative time since login. Shifting the assumed game
+        -- start time one second backwards ensures the timer bar doesn't run out
+        -- before reaching actual completion time, which could otherwise happen
+        -- due to GetTimeStamp() and GetFrameTimeSeconds() sampling at different
+        -- phases.
+        local currentTime = GetTimeStamp()
+        local frameTimeShift = currentTime - GetFrameTimeSeconds() - 1
+
+        local anchorControl = group:GetNamedChild("Header")
+
+        for _, info in ipairs(researchSlots) do
+            if info.completion > currentTime then
+                local completionFrameTime = info.completion - frameTimeShift
+                local row = group.rowPool:AcquireObject()
+                setupResearchRow(row, anchorControl, craftingType, info.lineIndex, info.traitIndex)
+                row.timer:Start(completionFrameTime - info.duration, completionFrameTime)
+                if group.characterName ~= g_characterName then
+                    function row.timer:onStop()
+                        updateResearchGroupFromSavedVars(group)
+                    end
+                end
                 anchorControl = row
+                numResearching = numResearching + 1
             end
         end
     end
 
     local numResearchingLabel = group:GetNamedChild("HeaderNumResearching")
+    local numResearchSlots = tonumber(group.savedVars["maxResearchSlots"]) or 1
     if numResearching < numResearchSlots then
         numResearchingLabel:SetColor(STAT_LOWER_COLOR:UnpackRGBA())
     else
         numResearchingLabel:SetColor(STAT_HIGHER_COLOR:UnpackRGBA())
     end
     numResearchingLabel:SetText(zo_strformat("<<1>>/<<2>>", numResearching, numResearchSlots))
+end
 
-    -- release unused research rows
-    for rowIndex = #(group.rowPool:GetActiveObjects()), numResearching + 1, -1 do
-        group.rowPool:ReleaseObject(rowIndex)
+
+local function updateResearchSavedVars(craftingType)
+    local craftingTypeName = craftingTypeToName[craftingType]
+    local craftingVars = DT.sub(g_characterVars, craftingTypeName)
+    local maxResearchSlots = GetMaxSimultaneousSmithingResearch(craftingType)
+
+    craftingVars["researchSlots"] = nil
+    craftingVars["maxResearchSlots"] = maxResearchSlots
+
+    for lineIndex = 1, GetNumSmithingResearchLines(craftingType) do
+        local _, _, numTraits = GetSmithingResearchLineInfo(craftingType, lineIndex)
+        for traitIndex = 1, numTraits do
+            local duration, remaining = GetSmithingResearchLineTraitTimes(craftingType, lineIndex, traitIndex)
+            if remaining then
+                local info = {
+                    lineIndex = lineIndex,
+                    traitIndex = traitIndex,
+                    duration = duration,
+                    completion = GetTimeStamp() + remaining,
+                }
+                DT.append(craftingVars, "researchSlots", info)
+            end
+        end
     end
+end
+
+
+local function createResearchGroup(characterName, craftingType, craftingTypeName)
+    local group = g_researchGroupPool:AcquireObject()
+    group.characterName = characterName
+    group.craftingType = craftingType
+    group.craftingTypeName = craftingTypeName
+    group.savedVars = DT.sub(g_savedVars, "characters", characterName, craftingTypeName)
+    group.characterNameLabel = group:GetNamedChild("HeaderCharacterName")
+    group.characterNameLabel:SetText(group.characterName)
+    updateResearchGroupFromSavedVars(group)
+    return group
 end
 
 
@@ -191,7 +311,6 @@ end
 
 
 function MovableStats:merCreateResearchSection()
-    local hideResearch = DT.sub(g_characterVars, "hideResearch")
     local header = self:AddHeader(SI_SMITHING_TAB_RESEARCH)
     local container = self.scrollChild:CreateControl("$(parent)Research", CT_CONTROL)
 
@@ -199,77 +318,119 @@ function MovableStats:merCreateResearchSection()
     self:AddRawControl(container)
     container:SetResizeToFitDescendents(true)
 
-    local function updateToggleButtonIcon(button)
-        if hideResearch[button.craftingTypeName] then
-            button.icon:SetColor(ZO_DEFAULT_DISABLED_COLOR:UnpackRGBA())
-        else
+    local function updateResearchToggleIcon(button, state)
+        if state then
             button.icon:SetColor(ZO_DEFAULT_ENABLED_COLOR:UnpackRGBA())
+        else
+            button.icon:SetColor(ZO_DEFAULT_DISABLED_COLOR:UnpackRGBA())
         end
     end
 
-    local function onToggleButtonClicked(button, mouseButton)
+    local function onResearchToggleClicked(button, mouseButton)
         if mouseButton == 1 then
             local craftingTypeName = button.craftingTypeName
-            hideResearch[craftingTypeName] = not hideResearch[craftingTypeName]
-            updateToggleButtonIcon(button)
+            local state = DT.neg(g_characterVars, craftingTypeName, "showResearchProgress")
+            updateResearchToggleIcon(button, state)
             self:merUpdateResearchGroupAnchors()
         end
     end
 
-    local function addToggleButton(craftingTypeName, offsetX)
+    local function addResearchToggle(craftingTypeName, offsetX)
         local craftingType = _G[craftingTypeName]
         local skillType, skillIndex = GetCraftingSkillLineIndices(craftingType)
-        local skillName = GetSkillLineInfo(skillType, skillIndex)
+        local skillName = formatSkillName(skillType, skillIndex)
         local _, skillIcon = GetSkillAbilityInfo(skillType, skillIndex, 1)
         local button = CreateControlFromVirtual("$(parent)Button", header,
                                                 "merCharacterSheetResearchToggleButton",
                                                 craftingType)
         button.craftingTypeName = craftingTypeName
-        button.tooltipText = zo_strformat(SI_SKILLS_ENTRY_LINE_NAME_FORMAT, skillName)
+        button.tooltipText = skillName
         button.icon = button:GetNamedChild("Icon")
         button.icon:SetTexture(skillIcon)
         button:SetAnchor(LEFT, nil, LEFT, offsetX, 2)
-        button:SetHandler("OnClicked", onToggleButtonClicked)
-        updateToggleButtonIcon(button)
+        button:SetHandler("OnClicked", onResearchToggleClicked)
+        local state = DT.get(g_characterVars, craftingTypeName, "showResearchProgress")
+        updateResearchToggleIcon(button, state)
     end
 
-    local function addResearchGroup(craftingTypeName)
-        local craftingType = _G[craftingTypeName]
-        local group = CreateControlFromVirtual("$(parent)Group", container,
-                                               "merCharacterSheetResearchGroup",
-                                               craftingType)
-        group.craftingType = craftingType
-        group.craftingTypeName = craftingTypeName
-        group.rowPool = ZO_ControlPool:New("merCharacterSheetResearchRow", group, "Row")
-        group.rowPool:SetCustomFactoryBehavior(initResearchRow)
-        group.rowPool:SetCustomResetBehavior(resetResearchRow)
-        updateResearchGroup(group, craftingType)
-        table.insert(g_researchGroups, group)
-    end
-
-    local headerTextWidth = header:GetTextWidth()
-    addToggleButton("CRAFTING_TYPE_BLACKSMITHING", headerTextWidth + 15)
-    addToggleButton("CRAFTING_TYPE_CLOTHIER", headerTextWidth + 55)
-    addToggleButton("CRAFTING_TYPE_WOODWORKING", headerTextWidth + 95)
-
-    addResearchGroup("CRAFTING_TYPE_BLACKSMITHING")
-    addResearchGroup("CRAFTING_TYPE_CLOTHIER")
-    addResearchGroup("CRAFTING_TYPE_WOODWORKING")
-
-    self:merUpdateResearchGroupAnchors()
-
-    local function updateResearch(eventCode, craftingType, lineIndex, traitIndex)
-        for _, group in ipairs(g_researchGroups) do
-            if eventCode == EVENT_SKILLS_FULL_UPDATE or
-               craftingType == group.craftingType then
-                updateResearchGroup(group, group.craftingType)
-            end
+    local function createAltResearchGroup(altName, craftingType, craftingTypeName, craftingTypeVars)
+        if craftingTypeVars["showResearchProgress"] then
+            createResearchGroup(altName, craftingType, craftingTypeName)
         end
     end
 
-    header:RegisterForEvent(EVENT_SKILLS_FULL_UPDATE, updateResearch)
-    header:RegisterForEvent(EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, updateResearch)
-    header:RegisterForEvent(EVENT_SMITHING_TRAIT_RESEARCH_STARTED, updateResearch)
+    local altsResearchGroupsCreated = false
+
+    local function updateAltsToggleState(button, state)
+        if state then
+            if not altsResearchGroupsCreated then
+                altsResearchGroupsCreated = true
+                foreachAltCraft { createAltResearchGroup }
+                g_researchGroupPool:SortActiveObjects()
+            end
+            button:SetState(BSTATE_DISABLED)
+        else
+            button:SetState(BSTATE_NORMAL)
+        end
+    end
+
+    local function onAltsToggleMouseUp(button, mouseButton, upInside)
+        if mouseButton == 1 and upInside then
+            local state = DT.neg(g_savedVars, "showAllCharactersResearch")
+            updateAltsToggleState(button, state)
+            self:merUpdateResearchGroupAnchors()
+        end
+    end
+
+    local function addAltsToggle(offsetX)
+        local button = CreateControlFromVirtual("$(parent)Alts", header,
+                                                "merCharacterSheetAltsToggleButton")
+        button.tooltipText = zo_strformat(SI_ADDON_MANAGER_CHARACTER_SELECT_ALL)
+        button:SetAnchor(RIGHT, nil, RIGHT, offsetX, 2)
+        button:SetHandler("OnMouseUp", onAltsToggleMouseUp)
+        local state = DT.get(g_savedVars, "showAllCharactersResearch")
+        updateAltsToggleState(button, state)
+    end
+
+    g_researchGroupPool = ZO_ControlPool:New("merCharacterSheetResearchGroup", container, "Group")
+    g_researchGroupPool:SetCustomFactoryBehavior(initResearchGroup)
+    g_researchGroupPool:SetCustomResetBehavior(resetResearchGroup)
+
+    do
+        local function compareResearchGroups(a, b)
+            if a.characterName == b.characterName then
+                return a.craftingType < b.craftingType
+            elseif a.characterName == g_characterName then
+                return true
+            elseif b.characterName == g_characterName then
+                return false
+            else
+                return a.characterName < b.characterName
+            end
+        end
+
+        function g_researchGroupPool:SortActiveObjects()
+            table.sort(self:GetActiveObjects(), compareResearchGroups)
+        end
+    end
+
+    for craftingType, craftingTypeName in pairs(craftingTypeToName) do
+        local group = createResearchGroup(g_characterName, craftingType, craftingTypeName)
+        g_researchGroupsByCraftingType[group.craftingType] = group
+    end
+
+    g_researchGroupPool:SortActiveObjects()
+
+    local offsetX = header:GetTextWidth() + 15
+
+    for i, group in ipairs(g_researchGroupPool:GetActiveObjects()) do
+        addResearchToggle(group.craftingTypeName, offsetX)
+        offsetX = offsetX + 40
+    end
+
+    addAltsToggle(-20)
+
+    self:merUpdateResearchGroupAnchors()
 end
 
 
@@ -371,14 +532,66 @@ end
 
 function MovableStats:merUpdateResearchGroupAnchors()
     local anchorControl, anchorPoint = nil, TOP
-    for _, group in ipairs(g_researchGroups) do
+    local showAll = DT.get(g_savedVars, "showAllCharactersResearch")
+    local lastName = (showAll and "" or g_characterName)
+    for _, group in ipairs(g_researchGroupPool:GetActiveObjects()) do
+        local canShow = (showAll or group.characterName == g_characterName)
         group:ClearAnchors()
-        if DT.get(g_characterVars, "hideResearch", group.craftingTypeName) then
-            group:SetHidden(true)
-        else
+        if canShow and group.savedVars["showResearchProgress"] then
             group:SetAnchor(TOP, anchorControl, anchorPoint, 0, 5)
             group:SetHidden(false)
+            group.characterNameLabel:SetHidden(lastName == group.characterName)
+            lastName = group.characterName
             anchorControl, anchorPoint = group, BOTTOM
+        else
+            group:SetHidden(true)
+        end
+    end
+end
+
+
+local announceAltResearchCompleted
+do
+    local eventTag = myNAME .. "_AltResearchCompleted"
+    local maxCheckInterval = 168 * 3600 -- one week is more than enough
+    local lastCheckTime = GetTimeStamp()
+    local nextCheckTime = -1
+    local currentTime = nil
+
+    local function checkResearch(altName, craftingType, researchIndex, researchInfo)
+        local completion = researchInfo.completion
+        if completion > currentTime then
+            if nextCheckTime > completion then
+                nextCheckTime = completion
+            end
+        elseif completion > lastCheckTime then
+            ZO_AlertEvent(EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, craftingType,
+                          researchInfo.lineIndex,  researchInfo.traitIndex)
+        end
+    end
+
+    local function checkCraft(altName, craftingType, craftingTypeName, craftingTypeVars)
+        local showResearchProgress = craftingTypeVars["showResearchProgress"]
+        local researchSlots = craftingTypeVars["researchSlots"]
+        if showResearchProgress and type(researchSlots) == "table" then
+            for index, info in ipairs(researchSlots) do
+                checkResearch(altName, craftingType, index, info)
+            end
+        end
+    end
+
+    function announceAltResearchCompleted()
+        EVENT_MANAGER:UnregisterForUpdate(eventTag)
+
+        currentTime = GetTimeStamp()
+        nextCheckTime = currentTime + maxCheckInterval
+
+        foreachAltCraft { checkCraft }
+        lastCheckTime = currentTime
+
+        if nextCheckTime < currentTime + maxCheckInterval then
+            local ms = (nextCheckTime - currentTime) * 1000
+            EVENT_MANAGER:RegisterForUpdate(eventTag, ms, announceAltResearchCompleted)
         end
     end
 end
@@ -389,8 +602,39 @@ local function onAddOnLoaded(eventCode, addOnName)
     EVENT_MANAGER:UnregisterForEvent(myNAME, EVENT_ADD_ON_LOADED)
 
     g_savedVars = DT.sub(_G, mySAVEDVARS)
-    g_characterVars = DT.sub(g_savedVars, "character:" .. GetUnitName("player"))
+    g_characterName = GetUnitName("player")
+    g_characterVars = DT.sub(g_savedVars, "characters", g_characterName)
+
+    -- delete settings from version <= 1.4
+    DT.del(g_savedVars, "character:" .. g_characterName)
+end
+
+
+local function onRefreshAllResearch(eventCode)
+    if eventCode == EVENT_PLAYER_ACTIVATED then
+        EVENT_MANAGER:UnregisterForEvent(myNAME, eventCode)
+        announceAltResearchCompleted()
+    end
+    for craftingType, group in pairs(g_researchGroupsByCraftingType) do
+        updateResearchSavedVars(craftingType)
+        if group then -- false until character sheet is shown
+            updateResearchGroupFromSavedVars(group)
+        end
+    end
+end
+
+
+local function onRefreshOneResearch(eventCode, craftingType, lineIndex, traitIndex)
+    updateResearchSavedVars(craftingType)
+    local group = g_researchGroupsByCraftingType[craftingType]
+    if group then -- false until character sheet is shown
+        updateResearchGroupFromSavedVars(group)
+    end
 end
 
 
 EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_ADD_ON_LOADED, onAddOnLoaded)
+EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_PLAYER_ACTIVATED, onRefreshAllResearch)
+EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_SKILLS_FULL_UPDATE, onRefreshAllResearch)
+EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, onRefreshOneResearch)
+EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_STARTED, onRefreshOneResearch)
