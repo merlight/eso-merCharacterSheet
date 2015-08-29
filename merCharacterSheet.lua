@@ -1,6 +1,7 @@
 local myNAME = "merCharacterSheet"
 local mySAVEDVARS = myNAME .. "_SavedVariables"
 local DT = merCharacterSheet.DeepTable
+local EM = EVENT_MANAGER
 
 local g_characterName = nil
 local g_characterVars = nil
@@ -581,7 +582,7 @@ do
     end
 
     function announceAltResearchCompleted()
-        EVENT_MANAGER:UnregisterForUpdate(eventTag)
+        EM:UnregisterForUpdate(eventTag)
 
         currentTime = GetTimeStamp()
         nextCheckTime = currentTime + maxCheckInterval
@@ -591,28 +592,15 @@ do
 
         if nextCheckTime < currentTime + maxCheckInterval then
             local ms = (nextCheckTime - currentTime) * 1000
-            EVENT_MANAGER:RegisterForUpdate(eventTag, ms, announceAltResearchCompleted)
+            EM:RegisterForUpdate(eventTag, ms, announceAltResearchCompleted)
         end
     end
 end
 
 
-local function onAddOnLoaded(eventCode, addOnName)
-    if addOnName ~= myNAME then return end
-    EVENT_MANAGER:UnregisterForEvent(myNAME, EVENT_ADD_ON_LOADED)
-
-    g_savedVars = DT.sub(_G, mySAVEDVARS)
-    g_characterName = GetUnitName("player")
-    g_characterVars = DT.sub(g_savedVars, "characters", g_characterName)
-
-    -- delete settings from version <= 1.4
-    DT.del(g_savedVars, "character:" .. g_characterName)
-end
-
-
 local function onRefreshAllResearch(eventCode)
     if eventCode == EVENT_PLAYER_ACTIVATED then
-        EVENT_MANAGER:UnregisterForEvent(myNAME, eventCode)
+        EM:UnregisterForEvent(myNAME, eventCode)
         announceAltResearchCompleted()
     end
     for craftingType, group in pairs(g_researchGroupsByCraftingType) do
@@ -633,8 +621,22 @@ local function onRefreshOneResearch(eventCode, craftingType, lineIndex, traitInd
 end
 
 
-EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_ADD_ON_LOADED, onAddOnLoaded)
-EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_PLAYER_ACTIVATED, onRefreshAllResearch)
-EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_SKILLS_FULL_UPDATE, onRefreshAllResearch)
-EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, onRefreshOneResearch)
-EVENT_MANAGER:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_STARTED, onRefreshOneResearch)
+local function onAddOnLoaded(eventCode, addOnName)
+    if addOnName ~= myNAME then return end
+    EM:UnregisterForEvent(myNAME, eventCode)
+
+    g_savedVars = DT.sub(_G, mySAVEDVARS)
+    g_characterName = GetUnitName("player")
+    g_characterVars = DT.sub(g_savedVars, "characters", g_characterName)
+
+    -- delete settings from version <= 1.4
+    DT.del(g_savedVars, "character:" .. g_characterName)
+
+    EM:RegisterForEvent(myNAME, EVENT_PLAYER_ACTIVATED, onRefreshAllResearch)
+    EM:RegisterForEvent(myNAME, EVENT_SKILLS_FULL_UPDATE, onRefreshAllResearch)
+    EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, onRefreshOneResearch)
+    EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_STARTED, onRefreshOneResearch)
+end
+
+
+EM:RegisterForEvent(myNAME, EVENT_ADD_ON_LOADED, onAddOnLoaded)
