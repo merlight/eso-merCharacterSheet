@@ -34,10 +34,10 @@
 				inherits="merCharacterSheetButtonBehavior">
 			<Dimensions x="32" y="32" />
 			<Textures
-				normal="EsoUI/Art/Progression/progression_indexIcon_guilds_up.dds"
-				pressed="EsoUI/Art/Progression/progression_indexIcon_guilds_down.dds"
-				disabled="EsoUI/Art/Progression/progression_indexIcon_guilds_down.dds"
-				mouseOver="EsoUI/Art/Progression/progression_indexIcon_guilds_over.dds"
+				normal="EsoUI/Art/Crafting/smithing_tabIcon_research_up.dds"
+				pressed="EsoUI/Art/Crafting/smithing_tabIcon_research_down.dds"
+				disabled="EsoUI/Art/Crafting/smithing_tabIcon_research_down.dds"
+				mouseOver="EsoUI/Art/Crafting/smithing_tabIcon_research_over.dds"
 			/>
 		</Button>
 
