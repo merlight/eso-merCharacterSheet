@@ -10,5 +10,6 @@
 ## SavedVariables: merCharacterSheet_SavedVariables
 
 DeepTable.lua
+LogTimerBar.lua
 merCharacterSheet.lua
 merCharacterSheet.xml

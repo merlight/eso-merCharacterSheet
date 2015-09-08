@@ -76,7 +76,7 @@
 				</Label>
 				<Control name="$(parent)TimerBar">
 					<Dimensions x="270" y="20" />
-					<Anchor point="RIGHT" offsetX="-5" />
+					<Anchor point="LEFT" relativePoint="RIGHT" offsetX="-275" />
 					<Controls>
 						<StatusBar name="$(parent)Status" inherits="ZO_ArrowStatusBarWithBG">
 							<AnchorFill />

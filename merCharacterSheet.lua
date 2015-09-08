@@ -2,6 +2,7 @@ local myNAME = "merCharacterSheet"
 local mySAVEDVARS = myNAME .. "_SavedVariables"
 local DT = merCharacterSheet.DeepTable
 local EM = EVENT_MANAGER
+local MAX_RESEARCH_DURATION = 64 * 86400 -- 64 days
 
 local g_characterName = nil
 local g_characterVars = nil
@@ -57,24 +58,10 @@ local function getStringIdName(stringId)
 end
 
 
-local MyTimerBar = ZO_TimerBar:Subclass()
-
-
-function MyTimerBar:Stop()
-    if not self:IsStarted() then
-        return
-    end
-    ZO_TimerBar.Stop(self)
-    if self.onStop then
-        self:onStop()
-    end
-end
-
-
 local function initResearchRow(row)
     row.itemIcon = row:GetNamedChild("ItemIcon")
     row.itemName = row:GetNamedChild("ItemName")
-    row.timer = MyTimerBar:New(row:GetNamedChild("TimerBar"))
+    row.timer = merCharacterSheet.LogTimerBar:New(row:GetNamedChild("TimerBar"))
     row.timer.direction = TIMER_BAR_COUNTS_DOWN
 
     -- assign time format parameters directly, only because ZOS forgot some
@@ -99,6 +86,14 @@ local function setupResearchRow(row, anchorControl, craftingType, lineIndex, tra
     row:SetAnchor(TOPRIGHT, anchorControl, BOTTOMRIGHT)
     row.itemName:SetText(zo_strformat("<<1>>: <<2>>", name, traitName))
     row.itemIcon:SetTexture(icon)
+end
+
+
+local function setupResearchTimer(timer, duration, completion)
+    -- the constants ensure that the logarithm's result will fall in the range (0.6, 1]
+    local logdur = math.log10(4 + 6 * zo_clamp(duration / MAX_RESEARCH_DURATION, 0, 1))
+    timer.control:SetWidth(270 * logdur)
+    timer:Start(completion - duration, completion)
 end
 
 
@@ -139,10 +134,9 @@ local function updateResearchGroupFromSavedVars(group)
 
         for _, info in ipairs(researchSlots) do
             if info.completion > currentTime then
-                local completionFrameTime = info.completion - frameTimeShift
                 local row = group.rowPool:AcquireObject()
                 setupResearchRow(row, anchorControl, craftingType, info.lineIndex, info.traitIndex)
-                row.timer:Start(completionFrameTime - info.duration, completionFrameTime)
+                setupResearchTimer(row.timer, info.duration, info.completion - frameTimeShift)
                 if group.characterName ~= g_characterName then
                     function row.timer:onStop()
                         updateResearchGroupFromSavedVars(group)
