@@ -2,7 +2,7 @@ local myNAME = "merCharacterSheet"
 local mySAVEDVARS = myNAME .. "_SavedVariables"
 local DT = merCharacterSheet.DeepTable
 local EM = EVENT_MANAGER
-local MAX_RESEARCH_DURATION = 64 * 86400 -- 64 days
+local LOG2 = 0.6931471805599453
 
 local g_characterName = nil
 local g_characterVars = nil
@@ -90,9 +90,11 @@ end
 
 
 local function setupResearchTimer(timer, duration, completion)
-    -- the constants ensure that the logarithm's result will fall in the range (0.6, 1]
-    local logdur = math.log10(4 + 6 * zo_clamp(duration / MAX_RESEARCH_DURATION, 0, 1))
-    timer.control:SetWidth(270 * logdur)
+    -- base 2 logarithm of "research duration divided by 3 hours"
+    -- for the first trait (6 hours without passives), it will be 1
+    -- for the ninth trait (64 days without passives), it will be 9
+    local logdur = math.log(math.max(duration / 10800, 1)) / LOG2
+    timer.control:SetWidth(135 + 15 * logdur)
     timer:Start(completion - duration, completion)
 end
 

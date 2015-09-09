@@ -1,5 +1,5 @@
 local LogTimerBar = ZO_TimerBar:Subclass()
-local log = math.log
+local LOG2 = 0.6931471805599453
 merCharacterSheet.LogTimerBar = LogTimerBar
 
 
@@ -14,9 +14,12 @@ function LogTimerBar:New(control)
         elseif value >= max then
             linearSetValue(status, max)
         else
-            local logval = log(value - min + 1)
-            local logmax = log(max - min + 1)
+            local logval = math.log(1 + (value - min) / 60)
+            local logmax = math.log(1 + (max - min) / 60)
             linearSetValue(status, min + (max - min) * logval / logmax)
+            -- update interval needs to get shorter as time elapses,
+            -- at 1 minute remaining the interval will be 2 seconds
+            bar.barUpdateInterval = 1 + logval / LOG2
         end
     end
 
