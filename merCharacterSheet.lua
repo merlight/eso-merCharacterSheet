@@ -23,6 +23,13 @@ local craftingTypeToName = {
     [CRAFTING_TYPE_WOODWORKING] = "CRAFTING_TYPE_WOODWORKING",
 }
 
+local CHAMPION_ATTRIBUTE_HUD_ICONS =
+{
+    [ATTRIBUTE_HEALTH] = "EsoUI/Art/Champion/champion_points_health_icon-HUD-32.dds",
+    [ATTRIBUTE_MAGICKA] = "EsoUI/Art/Champion/champion_points_magicka_icon-HUD-32.dds",
+    [ATTRIBUTE_STAMINA] = "EsoUI/Art/Champion/champion_points_stamina_icon-HUD-32.dds",
+}
+
 
 local function foreachAltCraft(func)
     local func = func[1]
@@ -206,6 +213,12 @@ MovableStats.__index = MovableStats
 setmetatable(STATS, MovableStats)
 
 
+function MovableStats:AddBountyRow(rowName)
+    self:merAddChampionRow()
+    return ZO_Stats.AddBountyRow(self, rowName)
+end
+
+
 function MovableStats:AddDivider()
     self.merLastSection = nil
     return ZO_Stats.AddDivider(self)
@@ -287,6 +300,39 @@ function MovableStats:SetUpTitleSection()
     self.merShadowHeader = createShadowControl("ShadowHeader", "ZO_StatsHeader")
     self.merShadowDivider = createShadowControl("ShadowDivider", "ZO_WideHorizontalDivider")
     self.merShadowDivider:SetAnchor(BOTTOM, self.merShadowHeader, TOP, 0, 5)
+end
+
+
+function MovableStats:merAddChampionRow()
+    local championRow = self:AddIconRow(GetString(SI_STAT_GAMEPAD_CHAMPION_RANK_LABEL))
+
+    local function updateChampionPoints()
+        local pointsEarned = GetPlayerChampionPointsEarned()
+        local pointsSpent = 0
+        local nextPointAttribute
+
+        for attribute, _ in next, CHAMPION_ATTRIBUTE_HUD_ICONS do
+            pointsSpent = pointsSpent + GetNumSpentChampionPoints(attribute)
+        end
+
+        if GetChampionXPInRank(pointsEarned) then
+            nextPointAttribute = GetChampionPointAttributeForRank(pointsEarned + 1)
+        else
+            nextPointAttribute = GetChampionPointAttributeForRank(pointsEarned)
+        end
+
+        if pointsSpent == pointsEarned then
+            championRow.value:SetText(zo_strformat("<<1>>", pointsSpent))
+        else
+            championRow.value:SetText(zo_strformat("<<1>>/<<2>>", pointsSpent, pointsEarned))
+        end
+
+        championRow.icon:SetHidden(false)
+        championRow.icon:SetTexture(CHAMPION_ATTRIBUTE_HUD_ICONS[nextPointAttribute])
+    end
+
+    championRow:RegisterForEvent(EVENT_UNSPENT_CHAMPION_POINTS_CHANGED, updateChampionPoints)
+    updateChampionPoints()
 end
 
 
