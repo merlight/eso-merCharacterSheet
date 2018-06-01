@@ -15,12 +15,14 @@ local g_researchGroupsByCraftingType = {
     [CRAFTING_TYPE_BLACKSMITHING] = false,
     [CRAFTING_TYPE_CLOTHIER] = false,
     [CRAFTING_TYPE_WOODWORKING] = false,
+    [CRAFTING_TYPE_JEWELRYCRAFTING] = false,
 }
 
 local craftingTypeToName = {
     [CRAFTING_TYPE_BLACKSMITHING] = "CRAFTING_TYPE_BLACKSMITHING",
     [CRAFTING_TYPE_CLOTHIER] = "CRAFTING_TYPE_CLOTHIER",
     [CRAFTING_TYPE_WOODWORKING] = "CRAFTING_TYPE_WOODWORKING",
+    [CRAFTING_TYPE_JEWELRYCRAFTING] = "CRAFTING_TYPE_JEWELRYCRAFTING",
 }
 
 local CHAMPION_ATTRIBUTE_HUD_ICONS =
@@ -315,7 +317,7 @@ function MovableStats:merAddChampionRow()
             pointsSpent = pointsSpent + GetNumSpentChampionPoints(attribute)
         end
 
-        if GetChampionXPInRank(pointsEarned) then
+        if GetNumChampionXPInChampionPoint(pointsEarned) then
             nextPointAttribute = GetChampionPointAttributeForRank(pointsEarned + 1)
         else
             nextPointAttribute = GetChampionPointAttributeForRank(pointsEarned)
