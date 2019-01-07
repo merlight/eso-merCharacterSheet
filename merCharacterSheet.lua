@@ -306,7 +306,7 @@ end
 
 
 function MovableStats:merAddChampionRow()
-    local championRow = self:AddIconRow(GetString(SI_STAT_GAMEPAD_CHAMPION_RANK_LABEL))
+    local championRow = self:AddIconRow(GetString(SI_STAT_GAMEPAD_CHAMPION_POINTS_LABEL))
 
     local function updateChampionPoints()
         local pointsEarned = GetPlayerChampionPointsEarned()
