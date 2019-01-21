@@ -4,8 +4,9 @@ local DT = merCharacterSheet.DeepTable
 local EM = EVENT_MANAGER
 local LOG2 = 0.6931471805599453
 
-local g_characterName = nil
+local g_characterId = nil
 local g_characterVars = nil
+local g_altsVars = nil
 local g_savedVars = nil
 
 local g_researchGroupPool = nil
@@ -35,12 +36,12 @@ local CHAMPION_ATTRIBUTE_HUD_ICONS =
 
 local function foreachAltCraft(func)
     local func = func[1]
-    for altName, altVars in pairs(DT.sub(g_savedVars, "characters")) do
-        if altName ~= g_characterName and type(altVars) == "table" then
+    for altId, altVars in pairs(g_altsVars) do
+        if altId ~= g_characterId and type(altVars) == "table" then
             for craftingType, craftingTypeName in pairs(craftingTypeToName) do
                 local craftingTypeVars = altVars[craftingTypeName]
                 if type(craftingTypeVars) == "table" then
-                    func(altName, craftingType, craftingTypeName, craftingTypeVars)
+                    func(altId, craftingType, craftingTypeName, craftingTypeVars)
                 end
             end
         end
@@ -148,7 +149,7 @@ local function updateResearchGroupFromSavedVars(group)
                 local row = group.rowPool:AcquireObject()
                 setupResearchRow(row, anchorControl, craftingType, info.lineIndex, info.traitIndex)
                 setupResearchTimer(row.timer, info.duration, info.completion - frameTimeShift)
-                if group.characterName ~= g_characterName then
+                if group.characterId ~= g_characterId then
                     function row.timer:onStop()
                         updateResearchGroupFromSavedVars(group)
                     end
@@ -196,12 +197,15 @@ local function updateResearchSavedVars(craftingType)
 end
 
 
-local function createResearchGroup(characterName, craftingType, craftingTypeName)
+local function createResearchGroup(characterId, craftingType, craftingTypeName)
     local group = g_researchGroupPool:AcquireObject()
-    group.characterName = characterName
+    local altVars = DT.sub(g_altsVars, characterId)
+    local rawName = altVars["rawCharacterName"] or characterId
+    group.characterId = characterId
+    group.characterName = ZO_CachedStrFormat(SI_UNIT_NAME, rawName)
     group.craftingType = craftingType
     group.craftingTypeName = craftingTypeName
-    group.savedVars = DT.sub(g_savedVars, "characters", characterName, craftingTypeName)
+    group.savedVars = DT.sub(altVars, craftingTypeName)
     group.characterNameLabel = group:GetNamedChild("HeaderCharacterName")
     group.characterNameLabel:SetText(group.characterName)
     updateResearchGroupFromSavedVars(group)
@@ -398,9 +402,9 @@ function MovableStats:merCreateResearchSection()
         updateResearchToggleIcon(button, state)
     end
 
-    local function createAltResearchGroup(altName, craftingType, craftingTypeName, craftingTypeVars)
+    local function createAltResearchGroup(altId, craftingType, craftingTypeName, craftingTypeVars)
         if craftingTypeVars["showResearchProgress"] then
-            createResearchGroup(altName, craftingType, craftingTypeName)
+            createResearchGroup(altId, craftingType, craftingTypeName)
         end
     end
 
@@ -443,11 +447,11 @@ function MovableStats:merCreateResearchSection()
 
     do
         local function compareResearchGroups(a, b)
-            if a.characterName == b.characterName then
+            if a.characterId == b.characterId then
                 return a.craftingType < b.craftingType
-            elseif a.characterName == g_characterName then
+            elseif a.characterId == g_characterId then
                 return true
-            elseif b.characterName == g_characterName then
+            elseif b.characterId == g_characterId then
                 return false
             else
                 return a.characterName < b.characterName
@@ -460,7 +464,7 @@ function MovableStats:merCreateResearchSection()
     end
 
     for craftingType, craftingTypeName in pairs(craftingTypeToName) do
-        local group = createResearchGroup(g_characterName, craftingType, craftingTypeName)
+        local group = createResearchGroup(g_characterId, craftingType, craftingTypeName)
         g_researchGroupsByCraftingType[group.craftingType] = group
     end
 
@@ -578,15 +582,15 @@ end
 function MovableStats:merUpdateResearchGroupAnchors()
     local anchorControl, anchorPoint = nil, TOP
     local showAll = DT.get(g_savedVars, "showAllCharactersResearch")
-    local lastName = (showAll and "" or g_characterName)
+    local lastId = (showAll and "" or g_characterId)
     for _, group in ipairs(g_researchGroupPool:GetActiveObjects()) do
-        local canShow = (showAll or group.characterName == g_characterName)
+        local canShow = (showAll or group.characterId == g_characterId)
         group:ClearAnchors()
         if canShow and group.savedVars["showResearchProgress"] then
             group:SetAnchor(TOP, anchorControl, anchorPoint, 0, 5)
             group:SetHidden(false)
-            group.characterNameLabel:SetHidden(lastName == group.characterName)
-            lastName = group.characterName
+            group.characterNameLabel:SetHidden(lastId == group.characterId)
+            lastId = group.characterId
             anchorControl, anchorPoint = group, BOTTOM
         else
             group:SetHidden(true)
@@ -603,7 +607,7 @@ do
     local nextCheckTime = -1
     local currentTime = nil
 
-    local function checkResearch(altName, craftingType, researchIndex, researchInfo)
+    local function checkResearch(altId, craftingType, researchIndex, researchInfo)
         local completion = researchInfo.completion
         if completion > currentTime then
             if nextCheckTime > completion then
@@ -615,12 +619,12 @@ do
         end
     end
 
-    local function checkCraft(altName, craftingType, craftingTypeName, craftingTypeVars)
+    local function checkCraft(altId, craftingType, craftingTypeName, craftingTypeVars)
         local showResearchProgress = craftingTypeVars["showResearchProgress"]
         local researchSlots = craftingTypeVars["researchSlots"]
         if showResearchProgress and type(researchSlots) == "table" then
             for index, info in ipairs(researchSlots) do
-                checkResearch(altName, craftingType, index, info)
+                checkResearch(altId, craftingType, index, info)
             end
         end
     end
@@ -670,11 +674,26 @@ local function onAddOnLoaded(eventCode, addOnName)
     EM:UnregisterForEvent(myNAME, eventCode)
 
     g_savedVars = DT.sub(_G, mySAVEDVARS)
-    g_characterName = GetUnitName("player")
-    g_characterVars = DT.sub(g_savedVars, "characters", g_characterName)
+    g_altsVars = DT.sub(g_savedVars, "characters")
+    g_characterId = GetCurrentCharacterId()
+    g_characterVars = g_altsVars[g_characterId]
 
-    -- delete settings from version <= 1.4
-    DT.del(g_savedVars, "character:" .. g_characterName)
+    if type(g_characterVars) ~= "table" then
+        local unadornedName = GetUnitName("player")
+        g_characterVars = g_altsVars[unadornedName]
+        if type(g_characterVars) == "table" then
+            -- prior to version 5100, unadorned character name was used
+            -- as the key => move the old table under g_characterId key
+            g_altsVars[unadornedName] = nil
+        else
+            -- haven't seen this character yet
+            g_characterVars = {}
+        end
+        g_altsVars[g_characterId] = g_characterVars
+    end
+
+    g_characterVars["rawCharacterName"] = GetRawUnitName("player")
+    g_characterVars["characterClassId"] = GetUnitClassId("player")
 
     EM:RegisterForEvent(myNAME, EVENT_PLAYER_ACTIVATED, onRefreshAllResearch)
     EM:RegisterForEvent(myNAME, EVENT_SKILLS_FULL_UPDATE, onRefreshAllResearch)
