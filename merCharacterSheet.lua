@@ -678,8 +678,10 @@ local function onAddOnLoaded(eventCode, addOnName)
 
     EM:RegisterForEvent(myNAME, EVENT_PLAYER_ACTIVATED, onRefreshAllResearch)
     EM:RegisterForEvent(myNAME, EVENT_SKILLS_FULL_UPDATE, onRefreshAllResearch)
+    EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_CANCELED, onRefreshOneResearch)
     EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, onRefreshOneResearch)
     EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_STARTED, onRefreshOneResearch)
+    EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_TIMES_UPDATED, onRefreshAllResearch)
 end
 
 
