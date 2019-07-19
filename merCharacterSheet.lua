@@ -3,6 +3,8 @@ local mySAVEDVARS = myNAME .. "_SavedVariables"
 local DT = merCharacterSheet.DeepTable
 local EM = EVENT_MANAGER
 local LOG2 = 0.6931471805599453
+local NO_LEADING_EDGE = false
+local SECONDS_IN_WEEK = 604800
 
 local g_characterId = nil
 local g_characterVars = nil
@@ -32,6 +34,16 @@ local CHAMPION_ATTRIBUTE_HUD_ICONS =
     [ATTRIBUTE_MAGICKA] = "EsoUI/Art/Champion/champion_points_magicka_icon-HUD-32.dds",
     [ATTRIBUTE_STAMINA] = "EsoUI/Art/Champion/champion_points_stamina_icon-HUD-32.dds",
 }
+
+
+local function foreachAlt(func)
+    local func = func[1]
+    for altId, altVars in pairs(g_altsVars) do
+        if altId ~= g_characterId and type(altVars) == "table" then
+            func(altId, altVars)
+        end
+    end
+end
 
 
 local function foreachAltCraft(func)
@@ -295,6 +307,115 @@ function MovableStats:CreateControlFromVirtual(controlType, template)
     end
 
     return control
+end
+
+
+function MovableStats:CreateMountSection()
+    ZO_Stats.CreateMountSection(self)
+
+    local sectionCreationTime = GetTimeStamp()
+    local altMountTrainingIds = {}
+
+    local function checkMountTraining(altId, altVars)
+        local endTime = altVars["mountTrainingUntil"] or 0
+        if endTime > sectionCreationTime - SECONDS_IN_WEEK then
+            table.insert(altMountTrainingIds, altId)
+        end
+    end
+
+    foreachAlt { checkMountTraining }
+    if #altMountTrainingIds == 0 then
+        return
+    end
+
+    table.sort(altMountTrainingIds, function(idA, idB)
+        local endTimeA = g_altsVars[idA]["mountTrainingUntil"]
+        local endTimeB = g_altsVars[idB]["mountTrainingUntil"]
+        return endTimeA < endTimeB
+    end)
+
+    local stableRow = self.scrollChild:GetNamedChild("StableRow1")
+    local nextTooltipUpdateTime = 0 -- shared update throttle
+
+    local function updateTimerTooltip(control, frameTime)
+        if frameTime == nil then -- forced immediate update
+            frameTime = GetFrameTimeSeconds()
+        elseif frameTime < nextTooltipUpdateTime then
+            return -- too soon after previous update
+        end
+
+        local text
+        local remainingTime = control.endTime - GetTimeStamp()
+        if remainingTime > 0 then
+            nextTooltipUpdateTime = frameTime + 0.5
+            -- ZO_FormatTime() with STYLE_COLONS and PRECISION_TWELVE_HOUR
+            -- produces output like "19h 46m 10s". Although this doesn't
+            -- make much sense to me, I copied these options from basic UI
+            -- ZO_Stats:CreateMountSection() to keep it consistent.
+            local strTime = ZO_FormatTime(remainingTime,
+                                          TIME_FORMAT_STYLE_COLONS,
+                                          TIME_FORMAT_PRECISION_TWELVE_HOUR)
+            -- Replace SPACE with NBSP (non-breaking space) to prevent
+            -- line-break within the time string. Basic UI doesn't do this,
+            -- though in my opinion it should.
+            strTime = strTime:gsub(" ", "\194\160")
+            text = zo_strformat("|c<<1>><<C:2>>|r recently upgraded a riding skill. <<Cp:2>> can train again in <<3>>.",
+                                control.charColor, control.charName, strTime)
+        else
+            nextTooltipUpdateTime = frameTime + 2.0
+            text = zo_strformat("|c<<1>><<C:2>>|r is ready to train a riding skill.",
+                                control.charColor, control.charName)
+        end
+        InformationTooltip:ClearLines()
+        SetTooltipText(InformationTooltip, text)
+    end
+
+    local function createMountTrainingControl(altId, altVars, index)
+        local timerIcon = CreateControlFromVirtual(
+                        "$(parent)_merAltRidingTimer", stableRow,
+                        "merCharacterSheetMountTimerIcon", index)
+        local classId = altVars["characterClassId"]
+        local startTime = altVars["mountTrainingSince"] or 0
+        local endTime = altVars["mountTrainingUntil"] or 0
+        timerIcon.charName = altVars["rawCharacterName"] or altId
+        timerIcon.charColor = GetClassColor(classId):ToHex()
+        timerIcon.startTime = startTime
+        timerIcon.endTime = endTime
+        timerIcon.updateTooltip = updateTimerTooltip
+        local timerOverlay = timerIcon:GetNamedChild("Overlay")
+        local function showRidingTrainable()
+            timerIcon:SetTexture("EsoUI/Art/Mounts/ridingSkill_ready.dds")
+            timerOverlay:SetHidden(true)
+        end
+        local remainingTime = endTime - sectionCreationTime
+        if remainingTime < 0.5 then
+            showRidingTrainable()
+        else
+            zo_callLater(showRidingTrainable, remainingTime * 1e3)
+            timerOverlay:StartCooldown(remainingTime * 1e3,
+                                       (endTime - startTime) * 1e3,
+                                       CD_TYPE_RADIAL,
+                                       CD_TIME_TYPE_TIME_UNTIL,
+                                       NO_LEADING_EDGE)
+        end
+        return timerIcon
+    end
+
+    local relativeTo = stableRow.timer
+    local offsetX = 0
+
+    -- create icons for the first 10, more would not fit in
+    for index = 1, math.min(10, #altMountTrainingIds) do
+        local altId = altMountTrainingIds[index]
+        local altVars = g_altsVars[altId]
+        local control = createMountTrainingControl(altId, altVars, index)
+        if index % 2 == 1 then
+            control:SetAnchor(BOTTOMRIGHT, relativeTo, LEFT, offsetX, -7)
+        else
+            control:SetAnchor(TOPRIGHT, relativeTo, LEFT, offsetX, -7)
+        end
+        offsetX = offsetX - 17
+    end
 end
 
 
@@ -619,7 +740,6 @@ end
 local announceAltResearchCompleted
 do
     local eventTag = myNAME .. "_AltResearchCompleted"
-    local maxCheckInterval = 168 * 3600 -- one week is more than enough
     local lastCheckTime = GetTimeStamp()
     local nextCheckTime = -1
     local currentTime = nil
@@ -650,12 +770,12 @@ do
         EM:UnregisterForUpdate(eventTag)
 
         currentTime = GetTimeStamp()
-        nextCheckTime = currentTime + maxCheckInterval
+        nextCheckTime = currentTime + SECONDS_IN_WEEK
 
         foreachAltCraft { checkCraft }
         lastCheckTime = currentTime
 
-        if nextCheckTime < currentTime + maxCheckInterval then
+        if nextCheckTime < currentTime + SECONDS_IN_WEEK then
             local ms = (nextCheckTime - currentTime) * 1000
             EM:RegisterForUpdate(eventTag, ms, announceAltResearchCompleted)
         end
@@ -682,6 +802,19 @@ local function onRefreshOneResearch(eventCode, craftingType, lineIndex, traitInd
     local group = g_researchGroupsByCraftingType[craftingType]
     if group then -- false until character sheet is shown
         updateResearchGroupFromSavedVars(group)
+    end
+end
+
+
+local function updateMountInfo()
+    local msecRemain, msecTotal = GetTimeUntilCanBeTrained()
+    if msecRemain > 0 then
+        local endTime = GetTimeStamp() + msecRemain / 1000
+        g_characterVars["mountTrainingSince"] = endTime - msecTotal / 1000
+        g_characterVars["mountTrainingUntil"] = endTime
+    else
+        g_characterVars["mountTrainingSince"] = nil
+        g_characterVars["mountTrainingUntil"] = nil
     end
 end
 
@@ -718,6 +851,9 @@ local function onAddOnLoaded(eventCode, addOnName)
     EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_COMPLETED, onRefreshOneResearch)
     EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_STARTED, onRefreshOneResearch)
     EM:RegisterForEvent(myNAME, EVENT_SMITHING_TRAIT_RESEARCH_TIMES_UPDATED, onRefreshAllResearch)
+
+    STABLE_MANAGER:RegisterCallback("StableMountInfoUpdated", updateMountInfo)
+    updateMountInfo()
 end
 
 

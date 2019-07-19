@@ -97,5 +97,23 @@
 			</Controls>
 		</Control>
 
+		<Texture name="merCharacterSheetMountTimerIcon" textureFile="EsoUI/Art/Miscellaneous/timer_32.dds" mouseEnabled="true" virtual="true">
+			<Dimensions x="32" y="32" />
+			<OnMouseEnter>
+				InitializeTooltip(InformationTooltip, self, RIGHT)
+				self.updateTooltip(self, nil) -- force update now
+				self:SetHandler("OnUpdate", self.updateTooltip)
+			</OnMouseEnter>
+			<OnMouseExit>
+				self:SetHandler("OnUpdate", nil)
+				ClearTooltip(InformationTooltip)
+			</OnMouseExit>
+			<Controls>
+				<Cooldown name="$(parent)Overlay" textureFile="EsoUI/Art/Miscellaneous/timer_overlay_32.dds">
+					<AnchorFill />
+				</Cooldown>
+			</Controls>
+		</Texture>
+
 	</Controls>
 </GuiXml>
