@@ -53,6 +53,10 @@
 				<Label name="$(parent)CharacterName" inherits="ZO_StatsRowName">
 					<Anchor point="LEFT" relativePoint="RIGHT" offsetX="-275" />
 				</Label>
+				<Texture name="$(parent)ClassIcon">
+					<Dimensions x="32" y="32" />
+					<Anchor point="RIGHT" relativePoint="LEFT" relativeTo="$(parent)CharacterName" offsetX="-5" />
+				</Texture>
 			</Controls>
 		</Control>
 

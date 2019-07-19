@@ -214,6 +214,7 @@ local function createResearchGroup(characterId, craftingType, craftingTypeName)
     local group = g_researchGroupPool:AcquireObject()
     local altVars = DT.sub(g_altsVars, characterId)
     local rawName = altVars["rawCharacterName"] or characterId
+    local icon = GetPlatformClassIcon(altVars["characterClassId"])
     group.characterId = characterId
     group.characterName = ZO_CachedStrFormat(SI_UNIT_NAME, rawName)
     group.craftingType = craftingType
@@ -221,6 +222,8 @@ local function createResearchGroup(characterId, craftingType, craftingTypeName)
     group.savedVars = DT.sub(altVars, craftingTypeName)
     group.characterNameLabel = group:GetNamedChild("HeaderCharacterName")
     group.characterNameLabel:SetText(group.characterName)
+    group.characterClassIcon = group:GetNamedChild("HeaderClassIcon")
+    group.characterClassIcon:SetTexture(icon)
     updateResearchGroupFromSavedVars(group)
     return group
 end
@@ -603,6 +606,7 @@ function MovableStats:merUpdateResearchGroupAnchors()
             group:SetAnchor(TOP, anchorControl, anchorPoint, 0, 5)
             group:SetHidden(false)
             group.characterNameLabel:SetHidden(lastId == group.characterId)
+            group.characterClassIcon:SetHidden(lastId == group.characterId)
             lastId = group.characterId
             anchorControl, anchorPoint = group, BOTTOM
         else
