@@ -55,16 +55,29 @@ local function formatSkillName(skillType, skillIndex)
 end
 
 
-local function getStringIdName(stringId)
-    if type(stringId) == "number" then
-        for key, value in zo_insecurePairs(_G) do
-            if value == stringId and type(key) == "string" and
-                key:find("^SI_[0-9A-Z_]+$") then
-                return key
+local g_stringIdentifierCache = {}
+do
+    g_stringIdentifierCache[SI_SMITHING_TAB_RESEARCH] = "SI_SMITHING_TAB_RESEARCH"
+    g_stringIdentifierCache[SI_STATS_ACTIVE_EFFECTS] = "SI_STATS_ACTIVE_EFFECTS"
+    g_stringIdentifierCache[SI_STATS_ATTRIBUTES] = "SI_STATS_ATTRIBUTES"
+    g_stringIdentifierCache[SI_STATS_BACKGROUND] = "SI_STATS_BACKGROUND"
+    g_stringIdentifierCache[SI_STATS_RIDING_SKILL] = "SI_STATS_RIDING_SKILL"
+
+    local function findStringIdName(cache, stringId)
+        if type(stringId) == "number" then
+            for key, value in zo_insecurePairs(_G) do
+                if value == stringId and type(key) == "string" and
+                    key:find("^SI_[0-9A-Z_]+$") then
+                    cache[stringId] = key
+                    return key
+                end
             end
+            cache[stringId] = stringId
         end
+        return stringId
     end
-    return stringId
+
+    setmetatable(g_stringIdentifierCache, {__index = findStringIdName})
 end
 
 
@@ -238,7 +251,7 @@ function MovableStats:AddHeader(text, optionalTemplate)
         self.merLastSection =
         {
             dividerControl = divider,
-            headerId = getStringIdName(text),
+            headerId = g_stringIdentifierCache[text],
             headerControl = header,
             lastControl = header,
         }
