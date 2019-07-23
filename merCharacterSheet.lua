@@ -2,6 +2,7 @@ local myNAME = "merCharacterSheet"
 local mySAVEDVARS = myNAME .. "_SavedVariables"
 local DT = merCharacterSheet.DeepTable
 local EM = EVENT_MANAGER
+local GT = LibGetText(myNAME).gettext
 local LOG2 = 0.6931471805599453
 local NO_LEADING_EDGE = false
 local SECONDS_IN_WEEK = 604800
@@ -119,7 +120,7 @@ local function setupResearchRow(row, anchorControl, craftingType, lineIndex, tra
     local traitName = GetString("SI_ITEMTRAITTYPE", traitType)
     row:ClearAnchors()
     row:SetAnchor(TOPRIGHT, anchorControl, BOTTOMRIGHT)
-    row.itemName:SetText(zo_strformat("<<1>>: <<2>>", name, traitName))
+    row.itemName:SetText(GT("<<1>>: <<2>>", name, traitName))
     row.itemIcon:SetTexture(icon)
 end
 
@@ -192,7 +193,7 @@ local function updateResearchGroupFromSavedVars(group)
     else
         numResearchingLabel:SetColor(STAT_HIGHER_COLOR:UnpackRGBA())
     end
-    numResearchingLabel:SetText(zo_strformat("<<1>>/<<2>>", numResearching, numResearchSlots))
+    numResearchingLabel:SetText(GT("<<1>>/<<2>>", numResearching, numResearchSlots))
 end
 
 
@@ -359,12 +360,12 @@ function MovableStats:CreateMountSection()
             -- line-break within the time string. Basic UI doesn't do this,
             -- though in my opinion it should.
             strTime = strTime:gsub(" ", "\194\160")
-            text = zo_strformat("|c<<1>><<C:2>>|r recently upgraded a riding skill. <<Cp:2>> can train again in <<3>>.",
-                                control.charColor, control.charName, strTime)
+            text = GT("|c<<1>><<C:2>>|r recently upgraded a riding skill. S/he can train again in <<3>>.",
+                      control.charColor, control.charName, strTime)
         else
             nextTooltipUpdateTime = frameTime + 2.0
-            text = zo_strformat("|c<<1>><<C:2>>|r is ready to train a riding skill.",
-                                control.charColor, control.charName)
+            text = GT("|c<<1>><<C:2>>|r is ready to train a riding skill.",
+                      control.charColor, control.charName)
         end
         InformationTooltip:ClearLines()
         SetTooltipText(InformationTooltip, text)
@@ -465,9 +466,9 @@ function MovableStats:merAddChampionRow()
         end
 
         if pointsSpent == pointsEarned then
-            championRow.value:SetText(zo_strformat("<<1>>", pointsSpent))
+            championRow.value:SetText(GT("<<1>>", pointsSpent))
         else
-            championRow.value:SetText(zo_strformat("<<1>>/<<2>>", pointsSpent, pointsEarned))
+            championRow.value:SetText(GT("<<1>>/<<2>>", pointsSpent, pointsEarned))
         end
 
         championRow.icon:SetHidden(false)
