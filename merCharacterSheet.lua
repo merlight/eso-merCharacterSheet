@@ -62,12 +62,6 @@ local function foreachAltCraft(func)
 end
 
 
-local function formatSkillName(skillType, skillIndex)
-    local rawSkillName = GetSkillLineInfo(skillType, skillIndex)
-    return zo_strformat(SI_SKILLS_ENTRY_LINE_NAME_FORMAT, rawSkillName)
-end
-
-
 local g_stringIdentifierCache = {}
 do
     g_stringIdentifierCache[SI_SMITHING_TAB_RESEARCH] = "SI_SMITHING_TAB_RESEARCH"
@@ -151,9 +145,9 @@ local function updateResearchGroupFromSavedVars(group)
     local craftingType = group.craftingType
     local numResearching = 0
 
-    local skillName = formatSkillName(GetCraftingSkillLineIndices(craftingType))
+    local skillLineData = SKILLS_DATA_MANAGER:GetCraftingSkillLineData(craftingType)
     local skillNameLabel = group:GetNamedChild("HeaderSkillName")
-    skillNameLabel:SetText(skillName)
+    skillNameLabel:SetText(skillLineData:GetFormattedName())
 
     group.rowPool:ReleaseAllObjects()
 
@@ -524,14 +518,14 @@ function MovableStats:merCreateResearchSection()
 
     local function addResearchToggle(craftingTypeName, offsetX)
         local craftingType = _G[craftingTypeName]
-        local skillType, skillIndex = GetCraftingSkillLineIndices(craftingType)
-        local skillName = formatSkillName(skillType, skillIndex)
+        local skillLineData = SKILLS_DATA_MANAGER:GetCraftingSkillLineData(craftingType)
+        local skillType, skillIndex = skillLineData:GetIndices()
         local _, skillIcon = GetSkillAbilityInfo(skillType, skillIndex, 1)
         local button = CreateControlFromVirtual("$(parent)Button", header,
                                                 "merCharacterSheetResearchToggleButton",
                                                 craftingType)
         button.craftingTypeName = craftingTypeName
-        button.tooltipText = skillName
+        button.tooltipText = skillLineData:GetFormattedName()
         button.icon = button:GetNamedChild("Icon")
         button.icon:SetTexture(skillIcon)
         button:SetAnchor(LEFT, nil, LEFT, offsetX, 2)

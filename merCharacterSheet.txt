@@ -2,7 +2,7 @@
 ## Description: Adds |ce5ca5cCrafting Research|r and |ce5ca5cAlt Riding Skill|r timers to |c76bcc3Character|r sheet, and allows you to reorder sections by dragging their headers.
 ## Author: Merlight
 ## APIVersion: 100028 100027
-## AddOnVersion: 5100
+## AddOnVersion: 5102
 ## DependsOn: LibGetText
 ## SavedVariables: merCharacterSheet_SavedVariables
 ## gitCommitHash: $Format:%H$
